@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高雄熱門服飾店導覽地圖 | Kaohsiung Apparel Map</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Noto Sans TC', 'Inter', sans-serif;
+        }
+        
+        /* Ensure Leaflet Container Fits nicely */
+        #map {
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Customize Leaflet Popup styling for a modern UI */
+        .leaflet-popup-content-wrapper {
+            padding: 0;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+        .leaflet-popup-content {
+            margin: 0;
+            width: 290px !important;
+        }
+        .leaflet-container a.leaflet-popup-close-button {
+            top: 12px;
+            right: 12px;
+            color: #ffffff;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+            font-size: 18px;
+            z-index: 10;
+        }
+
+        /* Ensure OSM attribution remains visible, compliant, and clearly readable */
+        .leaflet-control-attribution {
+            background-color: rgba(255, 255, 255, 0.9) !important;
+            padding: 3px 8px !important;
+            font-size: 11px !important;
+            border-top-left-radius: 6px;
+            color: #334155 !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .leaflet-control-attribution a {
+            color: #2563eb !important;
+            text-decoration: underline !important;
+        }
+
+        /* Custom scrollbar for sidebar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 h-full flex flex-col md:flex-row overflow-hidden text-slate-800">
+
+    <aside class="w-full md:w-[420px] lg:w-[460px] bg-white flex flex-col h-[55%] md:h-full z-20 shadow-2xl border-r border-slate-200 flex-shrink-0">
+        
+        <!-- Sidebar Header -->
+        <div class="p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex-shrink-0 relative overflow-hidden">
+            <div class="absolute -right-6 -bottom-6 w-28 h-28 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
+            
+            <div class="flex items-center justify-between relative z-10">
+                <div class="flex items-center space-x-3">
+                    <div class="w-11 h-11 rounded-xl bg-indigo-500/20 flex items-center justify-center border border-indigo-400/30 text-indigo-300 shadow-inner">
+                        <i class="fa-solid fa-shirt text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                            高雄服飾地圖
+                            <span class="text-[10px] bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold">Guide</span>
+                        </h1>
+                        <p class="text-xs text-indigo-200/80">Kaohsiung Apparel & Fashion Map</p>
+                    </div>
+                </div>
+                <button id="resetViewBtn" title="重置地圖檢視" class="px-3 py-1.5 text-xs bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all flex items-center gap-1.5 border border-white/10 active:scale-95">
+                    <i class="fa-solid fa-location-crosshairs"></i> 全景
+                </button>
+            </div>
+            
+            <!-- Real-time Stats Cards -->
+            <div class="grid grid-cols-3 gap-2 mt-4 relative z-10">
+                <div class="bg-white/10 backdrop-blur-md p-2.5 rounded-xl border border-white/10 text-center">
+                    <div class="text-[11px] text-slate-300 font-medium">總收錄店家</div>
+                    <div id="statTotal" class="text-lg font-bold text-white mt-0.5">0</div>
+                </div>
+                <div class="bg-white/10 backdrop-blur-md p-2.5 rounded-xl border border-white/10 text-center">
+                    <div class="text-[11px] text-slate-300 font-medium">符合條件</div>
+                    <div id="statFiltered" class="text-lg font-bold text-indigo-300 mt-0.5">0</div>
+                </div>
+                <div class="bg-white/10 backdrop-blur-md p-2.5 rounded-xl border border-white/10 text-center">
+                    <div class="text-[11px] text-slate-300 font-medium">目前營業中</div>
+                    <div id="statOpen" class="text-lg font-bold text-emerald-400 mt-0.5">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter and Search Area -->
+        <div class="p-4 bg-slate-50/80 border-b border-slate-200 space-y-3 flex-shrink-0">
+            
+            <!-- Search Input -->
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                <input type="text" id="searchInput" placeholder="搜尋店名、風格標籤或地址..." 
+                    class="w-full pl-10 pr-9 py-2.5 bg-white text-slate-800 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-sm">
+                <button id="clearSearchBtn" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+
+            <!-- Toggle Filter for Open Stores -->
+            <div class="flex items-center justify-between px-1">
+                <span class="text-xs font-medium text-slate-600 flex items-center gap-1.5">
+                    <i class="fa-regular fa-clock text-slate-400"></i> 只顯示營業中店家
+                </span>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="openOnlyToggle" class="sr-only peer">
+                    <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                </label>
+            </div>
+
+            <!-- Category Filter Chips -->
+            <div class="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 no-scrollbar text-xs" id="categoryChips">
+                <!-- Javascript dynamic population -->
+            </div>
+        </div>
+
+        <!-- Interactive Store List Scroll View -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/40" id="storeList">
+            <!-- Dynamic store cards -->
+        </div>
+
+        <!-- Footer Notice -->
+        <div class="p-3 bg-slate-100 border-t border-slate-200 text-center text-[11px] text-slate-500 flex-shrink-0 flex items-center justify-between px-4">
+            <span>高雄服飾導覽 &copy; 2026</span>
+            <span class="text-slate-400"><i class="fa-regular fa-map mr-1"></i>OpenStreetMap Tile Compliant</span>
+        </div>
+    </aside>
+
+    <main class="flex-1 h-[45%] md:h-full relative">
+        <div id="map"></div>
+    </main>
+
+    <script>
+        // High-precision dataset of Kaohsiung clothing stores
+        const storesData = [
+            {
+                id: 1,
+                name: "INVINCIBLE South",
+                lat: 22.6225,
+                lng: 120.3015,
+                address: "高雄市新興區仁智街285號",
+                category: "潮流選品",
+                tags: ["潮流選品", "限量球鞋", "國際潮牌"],
+                openTime: "14:00",
+                closeTime: "22:00",
+                desc: "台灣指標性潮流選貨店，引進日本及歐美頂尖潮流品牌與限量聯名球鞋。"
+            },
+            {
+                id: 2,
+                name: "WODEN 高雄門市",
+                lat: 22.6228,
+                lng: 120.3016,
+                address: "高雄市新興區仁智街237號",
+                category: "街頭潮流",
+                tags: ["街頭潮流", "戶外生活", "台灣原創"],
+                openTime: "14:00",
+                closeTime: "22:00",
+                desc: "台灣在地潮流品牌，集結美式街頭服飾、風格飾品配件與戶外休閒選品。"
+            },
+            {
+                id: 3,
+                name: "3 POINTER 高雄店",
+                lat: 22.6226,
+                lng: 120.3015,
+                address: "高雄市新興區仁智街259號",
+                category: "街頭選品",
+                tags: ["街頭選品", "台灣獨立品牌", "潮流剪裁"],
+                openTime: "14:00",
+                closeTime: "22:00",
+                desc: "精選多個台灣在地原創潮流品牌與設計師服飾，穿搭風格鮮明具特色。"
+            },
+            {
+                id: 4,
+                name: "INNOCENT HOOD",
+                lat: 22.6227,
+                lng: 120.3014,
+                address: "高雄市新興區仁智街238號",
+                category: "美式潮流",
+                tags: ["美式潮流", "街頭穿搭", "新崛江商圈"],
+                openTime: "14:00",
+                closeTime: "22:00",
+                desc: "位於新崛江商圈，主打高質感美式街頭潮流服飾與熱門鞋款選品。"
+            },
+            {
+                id: 5,
+                name: "虫洞 KH (Wormhole)",
+                lat: 22.6210,
+                lng: 120.2968,
+                address: "高雄市前金區成功一路318巷43號",
+                category: "復古古著",
+                tags: ["復古古著", "軍工裝", "日系選物"],
+                openTime: "15:00",
+                closeTime: "21:00",
+                desc: "南部知名古著選品店，一樓主打日系女裝古著，二樓精心佈置中性軍工裝。"
+            },
+            {
+                id: 6,
+                name: "MoonDy 楠梓旗艦店",
+                lat: 22.7275,
+                lng: 120.3270,
+                address: "高雄市楠梓區建楠路155號",
+                category: "平價質感",
+                tags: ["平價質感", "重磅素T", "簡約日常"],
+                openTime: "11:00",
+                closeTime: "21:30",
+                desc: "主打高CP值重磅素T、涼感服飾與質感包包飾品，深受當地學生與上班族喜愛。"
+            },
+            {
+                id: 7,
+                name: "MoonDy 玉竹門市",
+                lat: 22.6242,
+                lng: 120.3018,
+                address: "高雄市新興區玉竹一街32號",
+                category: "平價質感",
+                tags: ["平價文青", "服飾配件", "真皮配件"],
+                openTime: "13:00",
+                closeTime: "21:30",
+                desc: "鄰近新崛江商圈，主打簡約百搭韓系文青服飾、真皮小皮件與潮流飾品。"
+            },
+            {
+                id: 8,
+                name: "Emily Fashion Wear",
+                lat: 22.6229,
+                lng: 120.3014,
+                address: "高雄市新興區仁智街228號",
+                category: "英倫龐克",
+                tags: ["英倫龐克", "特色女裝", "獨特剪裁"],
+                openTime: "14:00",
+                closeTime: "21:30",
+                desc: "風格獨特的女性服飾選貨店，主打特殊剪裁、英倫龐克與個性穿搭造型。"
+            },
+            {
+                id: 9,
+                name: "後驛成衣商圈",
+                lat: 22.6398,
+                lng: 120.3025,
+                address: "高雄市三民區安寧街",
+                category: "成衣商圈",
+                tags: ["成衣批發", "平價多元", "南部五分埔"],
+                openTime: "10:00",
+                closeTime: "20:00",
+                desc: "號稱「南部五分埔」，匯集數百家成衣批發與零售店家，風格齊全且性價比高。"
+            }
+        ];
+
+        // Global State
+        let map;
+        let markers = {};
+        let activeCategory = "全選";
+        let openOnlyFilter = false;
+        let searchQuery = "";
+
+        // Default Map View Center
+        const KAOHSIUNG_CENTER = [22.6280, 120.3050];
+        const DEFAULT_ZOOM = 13;
+
+        // Dynamic categories for chips
+        const categories = ["全選", "潮流選品", "街頭潮流", "復古古著", "平價質感", "成衣商圈"];
+
+        // Helper: Real-time store open/closed checker
+        function isStoreOpen(openTimeStr, closeTimeStr) {
+            const now = new Date();
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+            const [openH, openM] = openTimeStr.split(":").map(Number);
+            const [closeH, closeM] = closeTimeStr.split(":").map(Number);
+
+            const openMinutes = openH * 60 + openM;
+            const closeMinutes = closeH * 60 + closeM;
+
+            if (closeMinutes < openMinutes) {
+                // Handle stores operating past midnight
+                return currentMinutes >= openMinutes || currentMinutes <= closeMinutes;
+            }
+            return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
+        }
+
+        function initMap() {
+            // Instantiate Map
+            map = L.map('map', {
+                zoomControl: false
+            }).setView(KAOHSIUNG_CENTER, DEFAULT_ZOOM);
+
+            // Re-position Zoom Control to top right for clear attribution placement
+            L.control.zoom({ position: 'topright' }).addTo(map);
+
+            /**
+             * OpenStreetMap Tile Usage Policy Compliance:
+             * 1. Standard Tile URL over HTTPS
+             * 2. Mandatory attribution string included (&copy; OpenStreetMap contributors)
+             * 3. Respectful tile zoom level cap (maxZoom: 19)
+             * 4. Relies on standard browser cache headers without aggressive scrapers
+             */
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Generate Store Markers
+            storesData.forEach(store => {
+                const isOpen = isStoreOpen(store.openTime, store.closeTime);
+                
+                // SVG Pin Icon with status coloring
+                const markerHtml = `
+                    <div class="relative group cursor-pointer transition-transform hover:scale-110">
+                        <div class="w-10 h-10 rounded-2xl ${isOpen ? 'bg-indigo-600 shadow-indigo-500/30' : 'bg-slate-600 shadow-slate-500/30'} text-white flex items-center justify-center shadow-lg border-2 border-white">
+                            <i class="fa-solid fa-bag-shopping text-base"></i>
+                        </div>
+                        <span class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 ${isOpen ? 'bg-indigo-600' : 'bg-slate-600'} rotate-45 border-r border-b border-white"></span>
+                    </div>
+                `;
+
+                const customIcon = L.divIcon({
+                    html: markerHtml,
+                    className: 'custom-map-pin',
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 40],
+                    popupAnchor: [0, -36]
+                });
+
+                const marker = L.marker([store.lat, store.lng], { icon: customIcon }).addTo(map);
+
+                // Google Maps Direction URL
+                const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(store.name + ' ' + store.address)}`;
+
+                // Create Rich Popup Card
+                const popupContent = `
+                    <div class="font-sans">
+                        <div class="bg-gradient-to-r ${isOpen ? 'from-indigo-600 to-indigo-700' : 'from-slate-700 to-slate-800'} p-3.5 text-white">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-white/20 backdrop-blur-sm text-white">
+                                    ${store.category}
+                                </span>
+                                <span class="px-2 py-0.5 text-[10px] font-bold rounded-full ${isOpen ? 'bg-emerald-400/20 text-emerald-300 border border-emerald-400/30' : 'bg-white/10 text-slate-300'}">
+                                    ${isOpen ? '● 營業中' : '○ 休息中'}
+                                </span>
+                            </div>
+                            <h3 class="font-bold text-base leading-tight">${store.name}</h3>
+                        </div>
+                        
+                        <div class="p-3.5 space-y-2.5 bg-white">
+                            <p class="text-xs text-slate-600 leading-relaxed">${store.desc}</p>
+                            
+                            <div class="text-[11px] text-slate-500 space-y-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                <div class="flex items-center gap-2">
+                                    <i class="fa-regular fa-clock text-indigo-500 w-3.5"></i>
+                                    <span>${store.openTime} - ${store.closeTime}</span>
+                                </div>
+                                <div class="flex items-start gap-2">
+                                    <i class="fa-solid fa-location-dot text-indigo-500 w-3.5 mt-0.5"></i>
+                                    <span class="leading-tight">${store.address}</span>
+                                </div>
+                            </div>
+
+                            <a href="${googleMapsUrl}" target="_blank" rel="noopener noreferrer"
+                               class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm shadow-indigo-200">
+                                <i class="fa-solid fa-diamond-turn-right"></i> Google 地圖導航
+                            </a>
+                        </div>
+                    </div>
+                `;
+
+                marker.bindPopup(popupContent);
+                markers[store.id] = marker;
+            });
+        }
+
+        function renderCategoryChips() {
+            const container = document.getElementById('categoryChips');
+            container.innerHTML = categories.map(cat => `
+                <button onclick="setCategory('${cat}')" 
+                    class="px-3 py-1.5 rounded-full whitespace-nowrap transition-all font-medium text-xs ${
+                        activeCategory === cat 
+                        ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200' 
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }">
+                    ${cat}
+                </button>
+            `).join('');
+        }
+
+        function setCategory(cat) {
+            activeCategory = cat;
+            renderCategoryChips();
+            updateDisplay();
+        }
+
+        function updateDisplay() {
+            const listContainer = document.getElementById('storeList');
+            listContainer.innerHTML = '';
+
+            let filteredStores = storesData.filter(store => {
+                const isOpen = isStoreOpen(store.openTime, store.closeTime);
+
+                // Category filter check
+                const matchesCategory = activeCategory === "全選" || store.category === activeCategory || store.tags.includes(activeCategory);
+
+                // Open status filter check
+                const matchesOpen = !openOnlyFilter || isOpen;
+
+                // Search term check
+                const q = searchQuery.toLowerCase().trim();
+                const matchesSearch = !q || 
+                    store.name.toLowerCase().includes(q) || 
+                    store.address.toLowerCase().includes(q) || 
+                    store.category.toLowerCase().includes(q) ||
+                    store.tags.some(t => t.toLowerCase().includes(q));
+
+                return matchesCategory && matchesOpen && matchesSearch;
+            });
+
+            // Refresh UI Statistics Counters
+            document.getElementById('statTotal').innerText = storesData.length;
+            document.getElementById('statFiltered').innerText = filteredStores.length;
+            document.getElementById('statOpen').innerText = storesData.filter(s => isStoreOpen(s.openTime, s.closeTime)).length;
+
+            // Empty state view
+            if (filteredStores.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="text-center py-12 px-4 text-slate-400">
+                        <i class="fa-solid fa-store-slash text-4xl mb-3 text-slate-300"></i>
+                        <p class="text-sm font-semibold text-slate-600">未找到符合條件的服飾店</p>
+                        <p class="text-xs mt-1 text-slate-400">請嘗試調整搜尋條件或選擇其他風格標籤</p>
+                    </div>
+                `;
+            }
+
+            // Render Sidebar Cards
+            filteredStores.forEach(store => {
+                const isOpen = isStoreOpen(store.openTime, store.closeTime);
+
+                const card = document.createElement('div');
+                card.className = "p-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group relative overflow-hidden";
+                
+                card.innerHTML = `
+                    <div class="flex items-start justify-between mb-1.5">
+                        <h3 class="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors text-sm">${store.name}</h3>
+                        <span class="px-2 py-0.5 text-[10px] font-bold rounded-full flex-shrink-0 ml-2 ${isOpen ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}">
+                            ${isOpen ? '營業中' : '休息中'}
+                        </span>
+                    </div>
+                    
+                    <p class="text-xs text-slate-500 mb-2.5 line-clamp-2 leading-relaxed">${store.desc}</p>
+                    
+                    <div class="flex flex-wrap gap-1 mb-3">
+                        ${store.tags.map(tag => `<span class="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-medium">${tag}</span>`).join('')}
+                    </div>
+
+                    <div class="text-[11px] text-slate-500 space-y-1 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                        <span class="flex items-center gap-1.5"><i class="fa-regular fa-clock text-slate-400"></i> ${store.openTime} - ${store.closeTime}</span>
+                        <span class="text-indigo-600 font-medium group-hover:translate-x-0.5 transition-transform text-[11px]">查看位置 <i class="fa-solid fa-angle-right text-[10px]"></i></span>
+                    </div>
+                `;
+
+                // Card Click Event -> Fly Map to store location and trigger popup
+                card.addEventListener('click', () => {
+                    focusStoreOnMap(store);
+                });
+
+                listContainer.appendChild(card);
+            });
+
+            // Update Leaflet Marker Visibility
+            storesData.forEach(store => {
+                const isVisible = filteredStores.some(s => s.id === store.id);
+                if (markers[store.id]) {
+                    if (isVisible) {
+                        markers[store.id].addTo(map);
+                    } else {
+                        map.removeLayer(markers[store.id]);
+                    }
+                }
+            });
+        }
+
+        // Fly map smooth transition function
+        function focusStoreOnMap(store) {
+            map.flyTo([store.lat, store.lng], 16, {
+                duration: 1.2
+            });
+            setTimeout(() => {
+                if (markers[store.id]) {
+                    markers[store.id].openPopup();
+                }
+            }, 1200);
+        }
+
+        window.onload = function() {
+            initMap();
+            renderCategoryChips();
+            updateDisplay();
+
+            const searchInput = document.getElementById('searchInput');
+            const clearSearchBtn = document.getElementById('clearSearchBtn');
+
+            // Search input listener
+            searchInput.addEventListener('input', (e) => {
+                searchQuery = e.target.value;
+                clearSearchBtn.classList.toggle('hidden', !searchQuery);
+                updateDisplay();
+            });
+
+            // Clear search button
+            clearSearchBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                searchQuery = '';
+                clearSearchBtn.classList.add('hidden');
+                updateDisplay();
+            });
+
+            // Open store toggle
+            document.getElementById('openOnlyToggle').addEventListener('change', (e) => {
+                openOnlyFilter = e.target.checked;
+                updateDisplay();
+            });
+
+            // Reset view button listener
+            document.getElementById('resetViewBtn').addEventListener('click', () => {
+                map.flyTo(KAOHSIUNG_CENTER, DEFAULT_ZOOM);
+            });
+        };
+    </script>
+</body>
+</html>
